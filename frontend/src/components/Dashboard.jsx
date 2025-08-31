@@ -1,5 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Settings, Play, Pause, MessageSquare, Users, BarChart3, AlertCircle, Trash2, Edit2, Database, Key, Activity } from 'lucide-react';
+
+// Simple icon components using text/symbols (same API as lucide-react)
+const SimpleIcons = {
+  Plus: ({ size, className }) => <span className={`text-lg ${className || ''}`}>+</span>,
+  Settings: ({ size, className }) => <span className={`text-lg ${className || ''}`}>⚙️</span>,
+  Play: ({ size, className }) => <span className={`text-lg ${className || ''}`}>▶️</span>,
+  Pause: ({ size, className }) => <span className={`text-lg ${className || ''}`}>⏸️</span>,
+  MessageSquare: ({ size, className }) => <span className={`text-lg ${className || ''}`}>💬</span>,
+  Users: ({ size, className }) => <span className={`text-lg ${className || ''}`}>👥</span>,
+  BarChart3: ({ size, className }) => <span className={`text-lg ${className || ''}`}>📊</span>,
+  AlertCircle: ({ size, className }) => <span className={`text-lg ${className || ''}`}>⚠️</span>,
+  Trash2: ({ size, className }) => <span className={`text-lg ${className || ''}`}>🗑️</span>,
+  Edit2: ({ size, className }) => <span className={`text-lg ${className || ''}`}>✏️</span>,
+  Database: ({ size, className }) => <span className={`text-lg ${className || ''}`}>🗄️</span>,
+  Key: ({ size, className }) => <span className={`text-lg ${className || ''}`}>🔑</span>,
+  Activity: ({ size, className }) => <span className={`text-lg ${className || ''}`}>📈</span>
+};
+
+const { Plus, Settings, Play, Pause, MessageSquare, Users, BarChart3, AlertCircle, Trash2, Edit2, Database, Key, Activity } = SimpleIcons;
 
 // Mock Database Layer - In production, this would be replaced with actual database calls
 const mockDatabase = {
@@ -248,7 +266,7 @@ const mockDatabase = {
             </div>
         </div>
 
-                <div className="space-y-3">
+        <div className="space-y-3">
             <div>
             <p className="text-sm text-gray-600 mb-1">Active in:</p>
             <div className="flex flex-wrap gap-1">
@@ -353,20 +371,7 @@ const mockDatabase = {
                     <div>
                         <p className="text-sm text-gray-600">Total Bots</p>
                         <p className="text-2xl font-bold text-gray-900">{bots.length}</p>
-                    <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">AI Provider</label>
-                    <select
-                    value={newBot.aiProviderId}
-                    onChange={(e) => setNewBot({...newBot, aiProviderId: parseInt(e.target.value)})}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2"
-                    >
-                    {aiProviders.map(provider => (
-                        <option key={provider.id} value={provider.id}>
-                        {provider.name} ({provider.model})
-                        </option>
-                    ))}
-                    </select>
-                </div>
+                    </div>
                     <Users className="text-blue-500" size={24} />
                     </div>
                 </div>
@@ -592,19 +597,6 @@ const mockDatabase = {
             </div>
             )}
 
-            {activeTab === 'analytics' && (
-            <div className="bg-white rounded-lg shadow-md p-6">
-                <h2 className="text-lg font-semibold mb-4">Bot Analytics</h2>
-                <div className="flex items-center justify-center h-64 text-gray-500">
-                <div className="text-center">
-                    <BarChart3 size={48} className="mx-auto mb-4" />
-                    <p>Analytics dashboard coming soon!</p>
-                    <p className="text-sm">Track bot performance, engagement metrics, and growth over time.</p>
-                </div>
-                </div>
-            </div>
-            )}
-
             {activeTab === 'settings' && (
             <div className="space-y-6">
                 <h2 className="text-lg font-semibold">Global Settings</h2>
@@ -676,20 +668,6 @@ const mockDatabase = {
                 </div>
             </div>
             )}
-                    <label className="block text-sm font-medium text-gray-700 mb-2">AI Provider</label>
-                    <select className="border border-gray-300 rounded-lg px-3 py-2 w-full">
-                    <option>OpenAI GPT-4</option>
-                    <option>Claude</option>
-                    <option>Custom API</option>
-                    </select>
-                </div>
-                <div className="flex items-center space-x-2">
-                    <input type="checkbox" id="rate-limiting" className="rounded" />
-                    <label htmlFor="rate-limiting" className="text-sm text-gray-700">Enable rate limiting protection</label>
-                </div>
-                </div>
-            </div>
-            )}
         </div>
 
         {/* Bot Creation/Edit Modal */}
@@ -757,6 +735,20 @@ const mockDatabase = {
                     <option>2-5 minutes</option>
                     <option>5-10 minutes</option>
                     <option>10-30 minutes</option>
+                    </select>
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">AI Provider</label>
+                    <select
+                    value={newBot.aiProviderId}
+                    onChange={(e) => setNewBot({...newBot, aiProviderId: parseInt(e.target.value)})}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                    >
+                    {aiProviders.map(provider => (
+                        <option key={provider.id} value={provider.id}>
+                        {provider.name} ({provider.model})
+                        </option>
+                    ))}
                     </select>
                 </div>
                 </div>
