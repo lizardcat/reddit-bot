@@ -42,9 +42,22 @@ const Bot = sequelize.define('Bot', {
     aiProviderId: {
         type: DataTypes.INTEGER,
         references: {
-        model: 'ai_providers',
-        key: 'id'
+            model: 'ai_providers',
+            key: 'id'
         }
+    },
+    // Reddit credentials
+    redditClientId: {
+        type: DataTypes.STRING
+    },
+    redditClientSecret: {
+        type: DataTypes.TEXT
+    },
+    redditUsername: {
+        type: DataTypes.STRING
+    },
+    redditPassword: {
+        type: DataTypes.TEXT
     },
     totalKarma: {
         type: DataTypes.INTEGER,

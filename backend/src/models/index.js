@@ -29,8 +29,13 @@ async function syncDatabase() {
         await sequelize.authenticate();
         console.log('Database connection has been established successfully.');
         
-        // Sync all models
-        await sequelize.sync({ alter: true });
+        // For development, use force: true to recreate tables
+        // WARNING: This will delete all existing data
+        const syncOptions = process.env.NODE_ENV === 'development' 
+            ? { force: true } 
+            : { alter: true };
+        
+        await sequelize.sync(syncOptions);
         console.log('All models were synchronized successfully.');
         
         return true;
