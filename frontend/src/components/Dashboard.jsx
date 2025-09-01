@@ -103,6 +103,74 @@ const mockDatabase = {
         isDefault: false
     });
     
+    // Settings state
+    const [settings, setSettings] = useState({
+        redditAppClientId: '',
+        redditAppClientSecret: '',
+        rateLimitingEnabled: true,
+        contentModerationEnabled: true,
+        maxPostsPerHour: 5
+    });
+    const [isSavingSettings, setIsSavingSettings] = useState(false);
+    const [validationErrors, setValidationErrors] = useState({});
+    const [isCreatingBot, setIsCreatingBot] = useState(false);
+    
+    // Bot form states - moved here to fix initialization order
+    const [showBotForm, setShowBotForm] = useState(false);
+    const [editingBot, setEditingBot] = useState(null);
+    const [newBot, setNewBot] = useState({
+        name: '',
+        username: '',
+        redditUsername: '',
+        redditPassword: '',
+        subreddits: '',
+        instructions: '',
+        autoResponse: true,
+        responseDelay: '2-5 minutes',
+        aiProviderId: 1
+    });
+    
+    // Load settings from database on mount
+    useEffect(() => {
+        const loadSettings = async () => {
+            try {
+                const response = await fetch('/api/settings');
+                if (response.ok) {
+                    const savedSettings = await response.json();
+                    setSettings(prev => ({ ...prev, ...savedSettings }));
+                }
+            } catch (error) {
+                console.log('Could not load settings, using defaults');
+            }
+        };
+        
+        loadSettings();
+    }, []);
+
+    // Modal closing functionality
+    useEffect(() => {
+        const handleEsc = (event) => {
+            if (event.keyCode === 27) { // ESC key
+                if (showBotForm) {
+                    closeModal();
+                }
+                if (showProviderForm) {
+                    setShowProviderForm(false);
+                    setNewProvider({ name: '', apiKey: '', apiUrl: '', model: '', isDefault: false });
+                }
+            }
+        };
+        document.addEventListener('keydown', handleEsc);
+        return () => document.removeEventListener('keydown', handleEsc);
+    }, [showBotForm, showProviderForm]);
+
+    const closeModal = () => {
+        setShowBotForm(false);
+        setEditingBot(null);
+        setValidationErrors({});
+        setNewBot({ name: '', username: '', redditUsername: '', redditPassword: '', subreddits: '', instructions: '', autoResponse: true, responseDelay: '2-5 minutes', aiProviderId: 1 });
+    };
+    
     const [bots, setBots] = useState([
         {
         id: 1,
@@ -135,18 +203,6 @@ const mockDatabase = {
         aiProviderId: 1
         }
     ]);
-
-    const [showBotForm, setShowBotForm] = useState(false);
-    const [editingBot, setEditingBot] = useState(null);
-    const [newBot, setNewBot] = useState({
-        name: '',
-        username: '',
-        subreddits: '',
-        instructions: '',
-        autoResponse: true,
-        responseDelay: '2-5 minutes',
-        aiProviderId: 1
-    });
 
     const toggleBotStatus = (botId) => {
         setBots(bots.map(bot => 
@@ -186,37 +242,143 @@ const mockDatabase = {
         })));
     };
 
+    // Settings save handler
+    const handleSaveSettings = async () => {
+        setIsSavingSettings(true);
+        try {
+            // In production, this would make an API call to save settings
+            const response = await fetch('/api/settings', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(settings)
+            });
+            
+            if (response.ok) {
+                console.log('Settings saved successfully');
+                // Optional: Show success message
+            } else {
+                console.error('Failed to save settings');
+            }
+        } catch (error) {
+            console.error('Error saving settings:', error);
+            // For now, just simulate success in mock environment
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        } finally {
+            setIsSavingSettings(false);
+        }
+    };
+
     const deleteBot = (botId) => {
         setBots(bots.filter(bot => bot.id !== botId));
     };
 
-    const handleCreateBot = () => {
-        if (newBot.name && newBot.username && newBot.subreddits) {
-        const bot = {
-            id: Date.now(),
-            name: newBot.name,
-            username: newBot.username,
-            status: 'paused',
-            subreddits: newBot.subreddits.split(',').map(s => s.trim()),
-            lastActive: 'Never',
-            postsToday: 0,
-            commentsToday: 0,
-            karma: 0,
-            instructions: newBot.instructions,
-            autoResponse: newBot.autoResponse,
-            responseDelay: newBot.responseDelay,
-            aiProviderId: newBot.aiProviderId
-        };
+    const handleCreateBot = async () => {
+        // Validate form fields
+        const errors = {};
+        if (!newBot.name.trim()) errors.name = 'Bot name is required';
+        if (!newBot.username.trim()) errors.username = 'Display username is required';
+        if (!newBot.redditUsername.trim()) errors.redditUsername = 'Reddit username is required';
+        if (!newBot.redditPassword.trim()) errors.redditPassword = 'Reddit password is required';
+        if (!newBot.subreddits.trim()) errors.subreddits = 'At least one subreddit is required';
         
-        if (editingBot) {
-            setBots(bots.map(b => b.id === editingBot.id ? { ...bot, id: editingBot.id } : b));
-        } else {
-            setBots([...bots, bot]);
-        }
+        setValidationErrors(errors);
         
-        setNewBot({ name: '', username: '', subreddits: '', instructions: '', autoResponse: true, responseDelay: '2-5 minutes', aiProviderId: 1 });
-        setShowBotForm(false);
-        setEditingBot(null);
+        // Only proceed if no errors
+        if (Object.keys(errors).length === 0) {
+            setIsCreatingBot(true);
+            try {
+                const botData = {
+                    name: newBot.name,
+                    username: newBot.username,
+                    redditUsername: newBot.redditUsername,
+                    redditPassword: newBot.redditPassword,
+                    subreddits: newBot.subreddits.split(',').map(s => s.trim()),
+                    instructions: newBot.instructions,
+                    autoResponse: newBot.autoResponse,
+                    responseDelay: newBot.responseDelay,
+                    aiProviderId: newBot.aiProviderId
+                };
+
+                let response;
+                if (editingBot) {
+                    // Update existing bot
+                    response = await fetch(`/api/bots/${editingBot.id}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(botData)
+                    });
+                } else {
+                    // Create new bot
+                    response = await fetch('/api/bots', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(botData)
+                    });
+                }
+
+                if (response.ok) {
+                    const savedBot = await response.json();
+                    
+                    // Update local state
+                    const bot = {
+                        ...savedBot,
+                        status: 'paused',
+                        lastActive: 'Never',
+                        postsToday: 0,
+                        commentsToday: 0,
+                        karma: 0
+                    };
+                    
+                    if (editingBot) {
+                        setBots(bots.map(b => b.id === editingBot.id ? bot : b));
+                    } else {
+                        setBots([...bots, bot]);
+                    }
+                    
+                    closeModal();
+                } else {
+                    console.error('Failed to save bot');
+                    // Handle error - could show error message to user
+                }
+            } catch (error) {
+                console.error('Error saving bot:', error);
+                // For mock environment, simulate success
+                const bot = {
+                    id: editingBot?.id || Date.now(),
+                    name: newBot.name,
+                    username: newBot.username,
+                    redditUsername: newBot.redditUsername,
+                    redditPassword: newBot.redditPassword,
+                    status: 'paused',
+                    subreddits: newBot.subreddits.split(',').map(s => s.trim()),
+                    lastActive: 'Never',
+                    postsToday: 0,
+                    commentsToday: 0,
+                    karma: 0,
+                    instructions: newBot.instructions,
+                    autoResponse: newBot.autoResponse,
+                    responseDelay: newBot.responseDelay,
+                    aiProviderId: newBot.aiProviderId
+                };
+                
+                await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate network delay
+                
+                if (editingBot) {
+                    setBots(bots.map(b => b.id === editingBot.id ? bot : b));
+                } else {
+                    setBots([...bots, bot]);
+                }
+                
+                closeModal();
+            } finally {
+                setIsCreatingBot(false);
+            }
         }
     };
 
@@ -225,6 +387,8 @@ const mockDatabase = {
         setNewBot({
         name: bot.name,
         username: bot.username,
+        redditUsername: bot.redditUsername || '',
+        redditPassword: bot.redditPassword || '',
         subreddits: bot.subreddits.join(', '),
         instructions: bot.instructions,
         autoResponse: bot.autoResponse,
@@ -602,27 +766,65 @@ const mockDatabase = {
                 <h2 className="text-lg font-semibold">Global Settings</h2>
                 
                 <div className="bg-white rounded-lg shadow-md p-6">
-                <h3 className="text-md font-semibold mb-4">Reddit API Configuration</h3>
+                <div className="flex items-start space-x-3 mb-4">
+                    <Key className="text-blue-600 mt-1" size={20} />
+                    <div>
+                    <h3 className="text-md font-semibold">Reddit App Credentials</h3>
+                    <p className="text-sm text-gray-600 mt-1">
+                        One-time setup for your Reddit app. These credentials are shared by all bots.
+                    </p>
+                    </div>
+                </div>
                 <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Client ID</label>
-                        <input type="text" placeholder="Your Reddit Client ID" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        App Client ID
+                        <span className="text-xs text-gray-500 block font-normal">From Reddit app registration</span>
+                        </label>
+                        <input 
+                        type="text" 
+                        placeholder="abc123xyz" 
+                        value={settings.redditAppClientId}
+                        onChange={(e) => setSettings({...settings, redditAppClientId: e.target.value})}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2" 
+                        />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Client Secret</label>
-                        <input type="password" placeholder="Your Reddit Client Secret" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        App Client Secret
+                        <span className="text-xs text-gray-500 block font-normal">From Reddit app registration</span>
+                        </label>
+                        <input 
+                        type="password" 
+                        placeholder="••••••••••••••••" 
+                        value={settings.redditAppClientSecret}
+                        onChange={(e) => setSettings({...settings, redditAppClientSecret: e.target.value})}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2" 
+                        />
                     </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Username</label>
-                        <input type="text" placeholder="Reddit Username" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <p className="text-sm text-blue-800">
+                        <strong>Note:</strong> Each bot needs its own Reddit username/password, which you'll set when creating individual bots.
+                        These app credentials authenticate your application with Reddit's API.
+                    </p>
                     </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Password</label>
-                        <input type="password" placeholder="Reddit Password" className="w-full border border-gray-300 rounded-lg px-3 py-2" />
-                    </div>
+                    <div className="flex justify-end">
+                    <button
+                        onClick={handleSaveSettings}
+                        disabled={isSavingSettings}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed flex items-center space-x-2"
+                    >
+                        {isSavingSettings ? (
+                        <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                            <span>Saving...</span>
+                        </>
+                        ) : (
+                        <span>Save Settings</span>
+                        )}
+                    </button>
                     </div>
                 </div>
                 </div>
@@ -635,18 +837,49 @@ const mockDatabase = {
                         <label className="text-sm font-medium text-gray-700">Enable Rate Limiting Protection</label>
                         <p className="text-xs text-gray-500">Automatically throttle requests to stay within Reddit's limits</p>
                     </div>
-                    <input type="checkbox" className="rounded" defaultChecked />
+                    <input 
+                        type="checkbox" 
+                        className="rounded" 
+                        checked={settings.rateLimitingEnabled}
+                        onChange={(e) => setSettings({...settings, rateLimitingEnabled: e.target.checked})}
+                    />
                     </div>
                     <div className="flex items-center justify-between">
                     <div>
                         <label className="text-sm font-medium text-gray-700">Content Moderation</label>
                         <p className="text-xs text-gray-500">Screen bot responses before posting</p>
                     </div>
-                    <input type="checkbox" className="rounded" defaultChecked />
+                    <input 
+                        type="checkbox" 
+                        className="rounded" 
+                        checked={settings.contentModerationEnabled}
+                        onChange={(e) => setSettings({...settings, contentModerationEnabled: e.target.checked})}
+                    />
                     </div>
                     <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Max Posts Per Hour</label>
-                    <input type="number" defaultValue="5" className="w-32 border border-gray-300 rounded-lg px-3 py-2" />
+                    <input 
+                        type="number" 
+                        value={settings.maxPostsPerHour} 
+                        onChange={(e) => setSettings({...settings, maxPostsPerHour: parseInt(e.target.value) || 0})}
+                        className="w-32 border border-gray-300 rounded-lg px-3 py-2" 
+                    />
+                    </div>
+                    <div className="flex justify-end">
+                    <button
+                        onClick={handleSaveSettings}
+                        disabled={isSavingSettings}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed flex items-center space-x-2"
+                    >
+                        {isSavingSettings ? (
+                        <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                            <span>Saving...</span>
+                        </>
+                        ) : (
+                        <span>Save Settings</span>
+                        )}
+                    </button>
                     </div>
                 </div>
                 </div>
@@ -672,50 +905,92 @@ const mockDatabase = {
 
         {/* Bot Creation/Edit Modal */}
         {showBotForm && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <div 
+                className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-2 sm:p-4 z-50 overflow-y-auto"
+                onClick={(e) => {
+                    if (e.target === e.currentTarget) {
+                        closeModal();
+                    }
+                }}
+            >
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-sm sm:max-w-md lg:max-w-lg p-4 sm:p-6 my-2 sm:my-4 mx-auto flex-shrink-0">
                 <h3 className="text-lg font-semibold mb-4">{editingBot ? 'Edit Bot' : 'Create New Bot'}</h3>
-                <div className="space-y-4">
+                <div className="space-y-3 sm:space-y-4">
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Bot Name</label>
                     <input
                     type="text"
                     value={newBot.name}
                     onChange={(e) => setNewBot({...newBot, name: e.target.value})}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                    className={`w-full border rounded-lg px-3 py-2 ${validationErrors.name ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
                     placeholder="e.g., TechBot"
                     />
+                    {validationErrors.name && <p className="text-red-500 text-xs mt-1">{validationErrors.name}</p>}
                 </div>
                 <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Reddit Username</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Display Username</label>
                     <input
                     type="text"
                     value={newBot.username}
                     onChange={(e) => setNewBot({...newBot, username: e.target.value})}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                    className={`w-full border rounded-lg px-3 py-2 ${validationErrors.username ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
                     placeholder="u/YourBotName"
                     />
+                    {validationErrors.username && <p className="text-red-500 text-xs mt-1">{validationErrors.username}</p>}
                 </div>
+                
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 sm:p-4">
+                    <h4 className="text-sm font-medium text-amber-800 mb-2">🔑 Reddit Account Credentials</h4>
+                    <p className="text-xs text-amber-700 mb-3">
+                        Each bot needs its own Reddit account to post and comment.
+                    </p>
+                    <div className="space-y-2 sm:space-y-3">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Reddit Username</label>
+                        <input
+                        type="text"
+                        value={newBot.redditUsername}
+                        onChange={(e) => setNewBot({...newBot, redditUsername: e.target.value})}
+                        className={`w-full border rounded-lg px-3 py-2 ${validationErrors.redditUsername ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
+                        placeholder="actual_reddit_username"
+                        />
+                        {validationErrors.redditUsername && <p className="text-red-500 text-xs mt-1">{validationErrors.redditUsername}</p>}
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Reddit Password</label>
+                        <input
+                        type="password"
+                        value={newBot.redditPassword}
+                        onChange={(e) => setNewBot({...newBot, redditPassword: e.target.value})}
+                        className={`w-full border rounded-lg px-3 py-2 ${validationErrors.redditPassword ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
+                        placeholder="••••••••••"
+                        />
+                        {validationErrors.redditPassword && <p className="text-red-500 text-xs mt-1">{validationErrors.redditPassword}</p>}
+                    </div>
+                    </div>
+                </div>
+                
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Subreddits</label>
                     <input
                     type="text"
                     value={newBot.subreddits}
                     onChange={(e) => setNewBot({...newBot, subreddits: e.target.value})}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                    className={`w-full border rounded-lg px-3 py-2 ${validationErrors.subreddits ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
                     placeholder="r/technology, r/programming"
                     />
+                    {validationErrors.subreddits && <p className="text-red-500 text-xs mt-1">{validationErrors.subreddits}</p>}
                 </div>
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Bot Instructions</label>
                     <textarea
                     value={newBot.instructions}
                     onChange={(e) => setNewBot({...newBot, instructions: e.target.value})}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 h-24 resize-none"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 h-20 sm:h-24 resize-none text-sm sm:text-base"
                     placeholder="Describe how your bot should behave, what topics to focus on, tone of voice, etc."
                     />
                 </div>
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
                     <div className="flex items-center space-x-2">
                     <input
                         type="checkbox"
@@ -729,7 +1004,7 @@ const mockDatabase = {
                     <select
                     value={newBot.responseDelay}
                     onChange={(e) => setNewBot({...newBot, responseDelay: e.target.value})}
-                    className="border border-gray-300 rounded px-2 py-1 text-sm"
+                    className="border border-gray-300 rounded px-2 py-1 text-xs sm:text-sm w-full sm:w-auto"
                     >
                     <option>1-2 minutes</option>
                     <option>2-5 minutes</option>
@@ -752,22 +1027,27 @@ const mockDatabase = {
                     </select>
                 </div>
                 </div>
-                <div className="flex justify-end space-x-3 mt-6">
+                <div className="flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-3 mt-4 sm:mt-6">
                 <button
-                    onClick={() => {
-                    setShowBotForm(false);
-                    setEditingBot(null);
-                    setNewBot({ name: '', username: '', subreddits: '', instructions: '', autoResponse: true, responseDelay: '2-5 minutes', aiProviderId: 1 });
-                    }}
-                    className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
+                    onClick={closeModal}
+                    disabled={isCreatingBot}
+                    className="w-full sm:w-auto px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
                 >
                     Cancel
                 </button>
                 <button
                     onClick={handleCreateBot}
-                    className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700"
+                    disabled={isCreatingBot}
+                    className="w-full sm:w-auto px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:bg-orange-400 disabled:cursor-not-allowed flex items-center justify-center space-x-2 text-sm sm:text-base"
                 >
-                    {editingBot ? 'Update Bot' : 'Create Bot'}
+                    {isCreatingBot ? (
+                        <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                            <span>{editingBot ? 'Updating...' : 'Creating...'}</span>
+                        </>
+                    ) : (
+                        <span>{editingBot ? 'Update Bot' : 'Create Bot'}</span>
+                    )}
                 </button>
                 </div>
             </div>
@@ -776,7 +1056,15 @@ const mockDatabase = {
 
         {/* AI Provider Form Modal */}
         {showProviderForm && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div 
+                className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+                onClick={(e) => {
+                    if (e.target === e.currentTarget) {
+                        setShowProviderForm(false);
+                        setNewProvider({ name: '', apiKey: '', apiUrl: '', model: '', isDefault: false });
+                    }
+                }}
+            >
             <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
                 <h3 className="text-lg font-semibold mb-4">Add AI Provider</h3>
                 <div className="space-y-4">
