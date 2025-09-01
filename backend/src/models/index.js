@@ -5,6 +5,7 @@ const Bot = require('./Bot');
 const Conversation = require('./Conversation');
 const Analytics = require('./Analytics');
 const ScheduledTask = require('./ScheduledTask');
+const GlobalSettings = require('./GlobalSettings');
 
 // Define associations
 AIProvider.hasMany(Bot, { foreignKey: 'aiProviderId', as: 'bots' });
@@ -29,11 +30,13 @@ async function syncDatabase() {
         await sequelize.authenticate();
         console.log('Database connection has been established successfully.');
         
-        // For development, use force: true to recreate tables
-        // WARNING: This will delete all existing data
-        const syncOptions = process.env.NODE_ENV === 'development' 
-            ? { force: true } 
-            : { alter: true };
+        // Database sync options
+        // force: true will drop and recreate tables (deletes all data)
+        // alter: true will modify existing tables to match models (preserves data)
+        const forceReset = process.env.FORCE_DB_RESET === 'true';
+        const syncOptions = forceReset 
+            ? { force: true }  // Only when explicitly requested
+            : { alter: true }; // Default: preserve existing data
         
         await sequelize.sync(syncOptions);
         console.log('All models were synchronized successfully.');

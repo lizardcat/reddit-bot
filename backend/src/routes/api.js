@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const BotController = require('../controllers/BotController');
 const AIProviderController = require('../controllers/AIProviderController');
+const SettingsController = require('../controllers/SettingsController');
 
 // Bot routes
 router.get('/bots', BotController.getAllBots);
@@ -26,5 +27,9 @@ router.post('/ai-providers', AIProviderController.createProvider);
 router.put('/ai-providers/:id', AIProviderController.updateProvider);
 router.delete('/ai-providers/:id', AIProviderController.deleteProvider);
 router.post('/ai-providers/:id/test', AIProviderController.testProvider);
+
+// Settings routes
+router.get('/settings', SettingsController.getGlobalSettings);
+router.post('/settings', SettingsController.updateGlobalSettings);
 
 module.exports = router;

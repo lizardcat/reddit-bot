@@ -1,5 +1,5 @@
 // backend/src/models/AIProvider.js
-const { DataTypes } = require('sequelize');
+const { DataTypes, Op } = require('sequelize');
 const sequelize = require('../config/database');
 
 const AIProvider = sequelize.define('AIProvider', {
@@ -40,7 +40,7 @@ const AIProvider = sequelize.define('AIProvider', {
             if (provider.isDefault) {
                 await AIProvider.update(
                     { isDefault: false },
-                    { where: { isDefault: true, id: { [sequelize.Op.ne]: provider.id } } }
+                    { where: { isDefault: true, id: { [Op.ne]: provider.id } } }
                 );
             }
         }

@@ -1,6 +1,8 @@
 // backend/src/controllers/BotController.js
 const Bot = require('../models/Bot');
 const BotService = require('../services/BotService');
+const GlobalSettings = require('../models/GlobalSettings');
+const AIProvider = require('../models/AIProvider');
 
 class BotController {
     async getAllBots(req, res) {
@@ -42,19 +44,48 @@ class BotController {
                 subreddits,
                 instructions,
                 autoResponse,
-                responseDelayMin,
-                responseDelayMax,
+                responseDelay,
                 aiProviderId,
-                redditClientId,
-                redditClientSecret,
                 redditUsername,
                 redditPassword
             } = req.body;
 
             // Validate required fields
-            if (!name || !username || !redditClientId || !redditClientSecret || !redditUsername || !redditPassword) {
+            if (!name || !username || !redditUsername || !redditPassword) {
                 return res.status(400).json({ 
-                    error: 'Missing required fields: name, username, Reddit credentials are required' 
+                    error: 'Missing required fields: name, username, Reddit username, and Reddit password are required' 
+                });
+            }
+
+            // Get global Reddit app credentials from settings
+            const globalSettings = await GlobalSettings.findOne();
+            if (!globalSettings || !globalSettings.redditClientId || !globalSettings.redditClientSecret) {
+                return res.status(400).json({
+                    error: 'Reddit app credentials not configured. Please configure them in Settings first.'
+                });
+            }
+
+            // Parse response delay (e.g., "2-5 minutes" -> responseDelayMin: 2, responseDelayMax: 5)
+            let responseDelayMin = 2;
+            let responseDelayMax = 5;
+            if (responseDelay) {
+                const match = responseDelay.match(/(\d+)-(\d+)/);
+                if (match) {
+                    responseDelayMin = parseInt(match[1]);
+                    responseDelayMax = parseInt(match[2]);
+                }
+            }
+
+            // Ensure there's a default AI provider
+            let defaultAiProvider = await AIProvider.findOne({ where: { isDefault: true } });
+            if (!defaultAiProvider) {
+                // Create a default AI provider if none exists
+                defaultAiProvider = await AIProvider.create({
+                    name: 'openai',
+                    apiKey: 'your-openai-api-key-here',
+                    apiUrl: 'https://api.openai.com/v1',
+                    model: 'gpt-4',
+                    isDefault: true
                 });
             }
 
@@ -64,11 +95,13 @@ class BotController {
                 subreddits: subreddits || [],
                 instructions,
                 autoResponse: autoResponse !== undefined ? autoResponse : true,
-                responseDelayMin: responseDelayMin || 2,
-                responseDelayMax: responseDelayMax || 5,
-                aiProviderId,
-                redditClientId,
-                redditClientSecret,
+                responseDelayMin,
+                responseDelayMax,
+                aiProviderId: aiProviderId || defaultAiProvider.id,
+                // Use global app credentials
+                redditClientId: globalSettings.redditClientId,
+                redditClientSecret: globalSettings.redditClientSecret,
+                // Use bot-specific account credentials
                 redditUsername,
                 redditPassword
             });
